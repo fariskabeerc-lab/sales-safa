@@ -9,6 +9,7 @@ from io import BytesIO
 st.set_page_config(layout="wide", page_title="Financial Performance Dashboard")
 
 # --- Global Configuration ---
+# Hardcoded file path as requested
 DATA_FILE_PATH = 'july to sep safa2025.Xlsx'
 
 # Initialize session state for view management
@@ -209,17 +210,17 @@ def create_item_monthly_chart(df_item, category_name):
 # --- Layout and Rendering ---
 
 def render_category_view(df_category_agg):
-    """Displays the main Category overview, now including overall GP metric."""
+    """Displays the main Category overview, including overall GP metric."""
     st.subheader("Category Overview: Total Sales, Profit, and GP Margin")
     
-    # 1. Metrics - REMOVED '$'
+    # 1. Metrics 
     total_sales = df_category_agg['Total_Sales'].sum()
     total_profit = df_category_agg['Total_Profit'].sum()
     
     # Calculate Company Gross Profit Margin
     total_gp = (total_profit / total_sales) if total_sales != 0 else 0
 
-    # Changed to 4 columns to include GP
+    # Use 4 columns for metrics
     col1, col2, col3, col4 = st.columns(4) 
     
     with col1:
@@ -251,8 +252,12 @@ def render_category_view(df_category_agg):
     
     # Display GP in the category table
     df_display = df_category_agg.copy()
-    # Updated column list to include 'GP'
-    df_display.columns = ['Category', 'Total Sales', 'Total Profit', 'GP'] 
+    
+    # FIX: Use .rename() to safely map internal column names to display names (fixing the ValueError)
+    df_display.rename(columns={
+        'Total_Sales': 'Total Sales',
+        'Total_Profit': 'Total Profit'
+    }, inplace=True)
     
     # Format GP as percentage
     df_display['GP'] = df_display['GP'].map('{:.2%}'.format) 
@@ -277,7 +282,7 @@ def render_category_view(df_category_agg):
 def render_item_view(df_data, category_name, search_name, search_code):
     """
     Displays the item-level detail for the selected category, 
-    applying search filters passed from the sidebar. Now includes item GP.
+    applying search filters passed from the sidebar. Includes item GP.
     """
     
     # Filter data for the selected category
@@ -388,7 +393,7 @@ def main():
     # Display the correct view based on state
     if st.session_state.df_data is not None:
         
-        # New: Render Sidebar Controls and get filter selections
+        # Render Sidebar Controls and get filter selections
         selected_category, search_name, search_code = render_sidebar_controls(st.session_state.df_category_agg)
         
         # Logic to determine which view to render based on sidebar selection
