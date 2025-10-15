@@ -26,20 +26,20 @@ def load_price_list(file_path):
 # ----------------------------
 # File paths
 # ----------------------------
-sales_file = "july to sep safa2025.Xlsx"
-price_file = "price list.xlsx"
+sales_file = "july to sep safa2025.Xlsx"  # replace with your sales file
+price_file = "price list.xlsx"            # replace with your price list file
 
 sales_df = load_sales_data(sales_file)
 price_df = load_price_list(price_file)
 
-# Fill missing columns if not in sales
+# Fill missing sales columns if not in sales
 for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
             'Aug-2025 Total Sales','Aug-2025 Total Profit',
             'Sep-2025 Total Sales','Sep-2025 Total Profit']:
     if col not in sales_df.columns:
         sales_df[col] = 0
 
-# Calculate GP columns in sales
+# Calculate GP and totals
 sales_df['Jul-2025 GP'] = sales_df['Jul-2025 Total Profit'] / sales_df['Jul-2025 Total Sales'].replace(0,1)
 sales_df['Aug-2025 GP'] = sales_df['Aug-2025 Total Profit'] / sales_df['Aug-2025 Total Sales'].replace(0,1)
 sales_df['Sep-2025 GP'] = sales_df['Sep-2025 Total Profit'] / sales_df['Sep-2025 Total Sales'].replace(0,1)
@@ -54,11 +54,17 @@ st.sidebar.header("Filters")
 item_search = st.sidebar.text_input("Search Item Name")
 barcode_search = st.sidebar.text_input("Search Item Bar Code")
 
+# Category filter (single-select)
+all_categories = sales_df['Category'].dropna().unique().tolist()
+all_categories.sort()
+all_categories.insert(0, "All")  # Add 'All' option
+selected_category = st.sidebar.selectbox("Select Category", all_categories)
+
 # ================================
 # Filter Logic
 # ================================
 if item_search or barcode_search:
-    # Use price list as base
+    # Search in price list
     search_base = price_df.copy()
 
     if item_search:
@@ -66,25 +72,49 @@ if item_search or barcode_search:
     if barcode_search:
         search_base = search_base[search_base['Item Bar Code'].str.contains(barcode_search, case=False, na=False)]
 
-    # Merge with sales to get sales values if available
+    # Merge with sales data if available
     filtered_df = pd.merge(search_base, sales_df, left_on='Item Bar Code', right_on='Item Code', how='left')
 
-    # Fill missing sales/profit/GP with NaN
+    # Fill missing sales/profit/GP with None
     for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
                 'Aug-2025 Total Sales','Aug-2025 Total Profit',
                 'Sep-2025 Total Sales','Sep-2025 Total Profit',
                 'Total Sales','Total Profit','Overall GP']:
         if col in filtered_df.columns:
             filtered_df[col] = filtered_df[col].where(filtered_df[col].notna(), None)
+        else:
+            filtered_df[col] = None
+
+    # Category column
+    if 'Category' not in filtered_df.columns:
+        filtered_df['Category'] = 'Unknown'
+    else:
+        filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
+
 else:
-    # Default dashboard: show only sales data
+    # Default: show sales data
     filtered_df = sales_df.copy()
+    if 'Category' not in filtered_df.columns:
+        filtered_df['Category'] = 'Unknown'
+    else:
+        filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
+
+# Apply category filter if not 'All'
+if selected_category != "All":
+    filtered_df = filtered_df[filtered_df['Category'] == selected_category]
+
+# Ensure sales columns exist for aggregation
+for col in ['Total Sales','Total Profit']:
+    if col not in filtered_df.columns:
+        filtered_df[col] = 0
+    else:
+        filtered_df[col] = filtered_df[col].fillna(0)
 
 # ================================
 # Key Metrics
 # ================================
-total_sales = filtered_df['Total Sales'].sum() if 'Total Sales' in filtered_df.columns else 0
-total_profit = filtered_df['Total Profit'].sum() if 'Total Profit' in filtered_df.columns else 0
+total_sales = filtered_df['Total Sales'].sum()
+total_profit = filtered_df['Total Profit'].sum()
 overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
 
 st.markdown("### 🔑 Key Metrics")
@@ -113,9 +143,6 @@ st.plotly_chart(fig_monthly, use_container_width=True)
 # ================================
 # Category-wise Analysis
 # ================================
-if 'Category' not in filtered_df.columns:
-    filtered_df['Category'] = 'Unknown'
-
 category_summary = filtered_df.groupby('Category').agg({'Total Sales':'sum','Total Profit':'sum'}).reset_index()
 category_summary['GP'] = category_summary['Total Profit'] / category_summary['Total Sales'].replace(0,1)
 
