@@ -12,10 +12,8 @@ st.set_page_config(layout="wide", page_title="Financial Performance Dashboard")
 DATA_FILE_PATH = 'july to sep safa2025.Xlsx'
 
 # Initialize session state for view management
-if 'view' not in st.session_state:
-    st.session_state.view = 'category'
 if 'selected_category' not in st.session_state:
-    st.session_state.selected_category = None
+    st.session_state.selected_category = 'All Categories' # Default to All Categories
 if 'df_data' not in st.session_state:
     st.session_state.df_data = None
 if 'df_category_agg' not in st.session_state:
@@ -72,6 +70,12 @@ def process_and_aggregate_data(df):
     df['Total Sales'] = df[sales_cols].sum(axis=1)
     df['Total Profit'] = df[profit_cols].sum(axis=1)
     
+    # NEW: Calculate Item-level Gross Profit (GP) Margin (Profit / Sales)
+    df['GP'] = df.apply(
+        lambda row: (row['Total Profit'] / row['Total Sales']) if row['Total Sales'] != 0 else 0,
+        axis=1
+    )
+    
     # 4. Clean 'Category' and filter
     if 'Category' not in df.columns:
         st.error("The 'Category' column is missing.")
@@ -90,19 +94,39 @@ def process_and_aggregate_data(df):
         Total_Profit=('Total Profit', 'sum')
     ).reset_index()
 
+    # NEW: Calculate aggregated GP for categories
+    df_category_agg['GP'] = df_category_agg.apply(
+        lambda row: (row['Total_Profit'] / row['Total_Sales']) if row['Total_Sales'] != 0 else 0,
+        axis=1
+    )
+
     return df_clean, df_category_agg, metric_cols
 
-# --- View Management Callbacks ---
+# --- Sidebar Controls ---
 
-def set_category_view():
-    """Callback to switch to the Category overview."""
-    st.session_state.view = 'category'
-    st.session_state.selected_category = None
+def render_sidebar_controls(df_category_agg):
+    """Renders the Category filter and search bars in the sidebar."""
+    
+    st.sidebar.title("Data Filters")
+    st.sidebar.markdown("---")
+    
+    # 1. Category Filter (Select Box)
+    categories = ['All Categories'] + sorted(df_category_agg['Category'].tolist())
+    
+    selected_category = st.sidebar.selectbox(
+        "Filter by Category",
+        options=categories,
+        key='sidebar_category_select'
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Item Search (Applies to Item View)")
+    
+    # 2. Search Filters
+    search_name = st.sidebar.text_input("Search by Item Name", key='sidebar_search_name').lower()
+    search_code = st.sidebar.text_input("Search by Item Code/Barcode", key='sidebar_search_code').lower()
 
-def set_item_view(category_name):
-    """Callback to drill down to Item details."""
-    st.session_state.view = 'item'
-    st.session_state.selected_category = category_name
+    return selected_category, search_name, search_code
 
 # --- Visualization Functions ---
 
@@ -131,14 +155,14 @@ def create_category_chart(df_agg):
     fig.update_layout(
         title_text='Total Sales and Profit by Category',
         xaxis_title='Category',
-        yaxis_title='Amount (USD)',
+        yaxis_title='Amount',
         barmode='group',
         hovermode="x unified",
         height=450
     )
     return fig
 
-def create_item_monthly_chart(df_item):
+def create_item_monthly_chart(df_item, category_name):
     """Generates a line chart for monthly trend of Sales and Profit for a category's items."""
     
     monthly_sales_cols = [col for col in st.session_state.monthly_metrics if 'Total Sales' in col]
@@ -174,9 +198,9 @@ def create_item_monthly_chart(df_item):
     ))
 
     fig.update_layout(
-        title_text=f"Monthly Sales and Profit Trend for {st.session_state.selected_category}",
+        title_text=f"Monthly Sales and Profit Trend for {category_name}",
         xaxis_title='Month',
-        yaxis_title='Amount (USD)',
+        yaxis_title='Amount',
         hovermode="x unified",
         height=450
     )
@@ -185,24 +209,32 @@ def create_item_monthly_chart(df_item):
 # --- Layout and Rendering ---
 
 def render_category_view(df_category_agg):
-    """Displays the main Category overview."""
-    st.subheader("Category Overview: Total Sales and Profit")
+    """Displays the main Category overview, now including overall GP metric."""
+    st.subheader("Category Overview: Total Sales, Profit, and GP Margin")
     
-    # 1. Metrics
+    # 1. Metrics - REMOVED '$'
     total_sales = df_category_agg['Total_Sales'].sum()
     total_profit = df_category_agg['Total_Profit'].sum()
     
-    col1, col2, col3 = st.columns(3)
+    # Calculate Company Gross Profit Margin
+    total_gp = (total_profit / total_sales) if total_sales != 0 else 0
+
+    # Changed to 4 columns to include GP
+    col1, col2, col3, col4 = st.columns(4) 
     
     with col1:
         st.metric(label="Total Company Sales (All Months)", 
-                  value=f"${total_sales:,.2f}", 
+                  value=f"{total_sales:,.2f}", 
                   delta_color="off")
     with col2:
         st.metric(label="Total Company Profit (All Months)", 
-                  value=f"${total_profit:,.2f}", 
+                  value=f"{total_profit:,.2f}", 
                   delta_color="off")
-    with col3:
+    with col3: # New column for GP
+        st.metric(label="Total Company GP Margin", 
+                  value=f"{total_gp:.2%}", # Format as percentage
+                  delta_color="off")
+    with col4: 
         st.metric(label="Total Categories", 
                   value=f"{len(df_category_agg):,}", 
                   delta_color="off")
@@ -214,60 +246,48 @@ def render_category_view(df_category_agg):
 
     st.markdown("---")
 
-    # 3. Table with Drill-down
+    # 3. Table 
     st.subheader("Category Performance Table")
     
-    # Prepare table with a button column
+    # Display GP in the category table
     df_display = df_category_agg.copy()
-    df_display.columns = ['Category', 'Total Sales', 'Total Profit']
+    # Updated column list to include 'GP'
+    df_display.columns = ['Category', 'Total Sales', 'Total Profit', 'GP'] 
     
-    # Streamlit buttons must be created outside of the dataframe, so we iterate rows
-    
-    # Format currency columns for display 
-    df_display['Total Sales'] = df_display['Total Sales'].map('${:,.2f}'.format)
-    df_display['Total Profit'] = df_display['Total Profit'].map('${:,.2f}'.format)
+    # Format GP as percentage
+    df_display['GP'] = df_display['GP'].map('{:.2%}'.format) 
+    # Format Sales/Profit as numbers (removed $)
+    df_display['Total Sales'] = df_display['Total Sales'].map('{:,.2f}'.format)
+    df_display['Total Profit'] = df_display['Total Profit'].map('{:,.2f}'.format)
     
     st.dataframe(df_display, 
                  column_config={
                      "Category": st.column_config.TextColumn("Category"),
                      "Total Sales": st.column_config.TextColumn("Total Sales", help="Overall sales across all months."),
-                     "Total Profit": st.column_config.TextColumn("Total Profit", help="Overall profit across all months.")
+                     "Total Profit": st.column_config.TextColumn("Total Profit", help="Overall profit across all months."),
+                     # Added GP Column Config
+                     "GP": st.column_config.TextColumn("GP Margin", help="Gross Profit Margin (Profit/Sales)") 
                  },
                  hide_index=True, 
                  use_container_width=True)
                  
-    # Display drill-down buttons below the table
-    st.markdown("---")
-    st.subheader("Drill Down to Item Details")
-    col_buttons = st.columns(len(df_category_agg))
-    
-    for i, category in enumerate(df_category_agg['Category']):
-        with col_buttons[i]:
-            st.button(f"Analyze {category}", key=f"cat_btn_{category}", on_click=set_item_view, args=(category,))
+    st.info("Use the **Filter by Category** dropdown in the sidebar to drill down to item details.")
 
 
-def render_item_view(df_data, category_name):
-    """Displays the item-level detail for the selected category."""
+def render_item_view(df_data, category_name, search_name, search_code):
+    """
+    Displays the item-level detail for the selected category, 
+    applying search filters passed from the sidebar. Now includes item GP.
+    """
     
     # Filter data for the selected category
     df_category_items = df_data[df_data['Category'] == category_name].copy()
 
     st.header(f"Items in: {category_name}")
     
-    # Back button
-    st.button("← Back to Categories", on_click=set_category_view)
-
     st.markdown("---")
     
-    # 1. Search and Filter Controls
-    col_name, col_code = st.columns(2)
-    
-    with col_name:
-        search_name = st.text_input("Search by Item Name (e.g., 'Items')", key='search_name').lower()
-    with col_code:
-        search_code = st.text_input("Search by Item Code (e.g., 'Barcode')", key='search_code').lower()
-
-    # Apply filters
+    # Apply filters using the values passed from the sidebar
     df_filtered = df_category_items
     
     # Find the actual name column by inference
@@ -290,7 +310,7 @@ def render_item_view(df_data, category_name):
     st.markdown("---")
 
     # 2. Monthly Trend Chart (based on the original category items, not the filtered set)
-    st.plotly_chart(create_item_monthly_chart(df_category_items), use_container_width=True)
+    st.plotly_chart(create_item_monthly_chart(df_category_items, category_name), use_container_width=True)
     st.markdown("---")
 
     # 3. Item-level Detailed Table
@@ -302,8 +322,8 @@ def render_item_view(df_data, category_name):
     if code_col and code_col in df_filtered.columns: display_cols.append(code_col)
     if name_col and name_col in df_filtered.columns: display_cols.append(name_col)
     
-    # Ensure mandatory Total columns are present
-    display_cols.extend(['Total Sales', 'Total Profit'])
+    # Ensure mandatory Total columns are present, including GP
+    display_cols.extend(['Total Sales', 'Total Profit', 'GP']) 
     
     # Add monthly metrics
     display_cols.extend(st.session_state.monthly_metrics)
@@ -313,15 +333,20 @@ def render_item_view(df_data, category_name):
     final_cols = list(pd.unique(final_cols))
     
     df_table = df_filtered[final_cols].copy()
+    
+    # Format the 'GP' column as percentage 
+    df_table['GP'] = df_table['GP'].map('{:.2%}'.format)
 
-    # Define column configurations for formatting totals and monthly metrics
+    # Define column configurations for formatting totals and monthly metrics 
     column_config = {
-        'Total Sales': st.column_config.NumberColumn("Total Sales", format="$%.2f"),
-        'Total Profit': st.column_config.NumberColumn("Total Profit", format="$%.2f"),
+        'Total Sales': st.column_config.NumberColumn("Total Sales", format="%.2f"),
+        'Total Profit': st.column_config.NumberColumn("Total Profit", format="%.2f"),
+        # Updated GP format for the table
+        'GP': st.column_config.TextColumn("GP Margin", help="Gross Profit Margin (Profit/Sales)"), 
     }
     
     for col in st.session_state.monthly_metrics:
-         column_config[col] = st.column_config.NumberColumn(col, format="$%.2f")
+         column_config[col] = st.column_config.NumberColumn(col, format="%.2f")
 
     st.dataframe(
         df_table, 
@@ -350,7 +375,8 @@ def main():
                     st.session_state.df_data = df_data
                     st.session_state.df_category_agg = df_category_agg
                     st.session_state.monthly_metrics = monthly_metrics
-                    st.session_state.view = 'category'
+                    # Initial category view is now 'All Categories' by default
+                    st.session_state.selected_category = 'All Categories'
                     st.success("Data loaded and processed successfully!")
                 else:
                     st.error("Failed to process data. Check console/file content for structure issues.")
@@ -361,14 +387,21 @@ def main():
                 
     # Display the correct view based on state
     if st.session_state.df_data is not None:
-        if st.session_state.view == 'category':
+        
+        # New: Render Sidebar Controls and get filter selections
+        selected_category, search_name, search_code = render_sidebar_controls(st.session_state.df_category_agg)
+        
+        # Logic to determine which view to render based on sidebar selection
+        if selected_category == 'All Categories':
+            # View 1: Category Overview
             render_category_view(st.session_state.df_category_agg)
-        
-        elif st.session_state.view == 'item' and st.session_state.selected_category:
-            render_item_view(st.session_state.df_data, st.session_state.selected_category)
-        
         else:
-            set_category_view() # Redirect to safe view
+            # View 2: Item Detail for selected category, applying sidebar search filters
+            render_item_view(st.session_state.df_data, selected_category, search_name, search_code)
+    
+    # Add a note if data failed to load
+    elif st.session_state.df_data is None and DATA_FILE_PATH:
+        st.markdown(f"Please ensure **{DATA_FILE_PATH}** is present and contains correct columns.")
 
 
 if __name__ == "__main__":
