@@ -23,9 +23,9 @@ def load_price_list(file_path):
     df_price['Item Bar Code'] = df_price['Item Bar Code'].astype(str)
     return df_price
 
-# ----------------------------
+# ================================
 # File paths
-# ----------------------------
+# ================================
 sales_file = "july to sep safa2025.Xlsx"  # replace with your sales file
 price_file = "price list.xlsx"            # replace with your price list file
 
@@ -108,7 +108,7 @@ def compute_row_totals(row):
 
     total_sales = sum([row[col] if pd.notna(row[col]) else 0 for col in sales_cols])
     total_profit = sum([row[col] if pd.notna(row[col]) else 0 for col in profit_cols])
-    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
+    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0  # GP = Total Profit ÷ Total Sales
     return pd.Series([total_sales, total_profit, overall_gp])
 
 filtered_df[['Total Sales','Total Profit','Overall GP']] = filtered_df.apply(compute_row_totals, axis=1)
@@ -116,24 +116,19 @@ filtered_df[['Total Sales','Total Profit','Overall GP']] = filtered_df.apply(com
 # ================================
 # Key Metrics
 # ================================
+total_sales = filtered_df['Total Sales'].sum()
+total_profit = filtered_df['Total Profit'].sum()
+overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
+
 if not (item_search or barcode_search):
-    total_sales = filtered_df['Total Sales'].sum()
-    total_profit = filtered_df['Total Profit'].sum()
-    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
     st.markdown("### 🔑 Key Metrics")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Sales", f"{total_sales:,.0f}")
-    col2.metric("Total Profit", f"{total_profit:,.0f}")
-    col3.metric("Overall GP", f"{overall_gp:.2%}")
 else:
-    total_sales = filtered_df['Total Sales'].sum()
-    total_profit = filtered_df['Total Profit'].sum()
-    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
     st.markdown("### 🔑 Key Metrics for Searched Items")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Sales", f"{total_sales:,.0f}")
-    col2.metric("Total Profit", f"{total_profit:,.0f}")
-    col3.metric("Overall GP", f"{overall_gp:.2%}")
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Sales", f"{total_sales:,.0f}")
+col2.metric("Total Profit", f"{total_profit:,.0f}")
+col3.metric("Overall GP", f"{overall_gp:.2%}")
 
 # ================================
 # Monthly Performance Graph
@@ -186,9 +181,13 @@ table_cols = ['Item Bar Code','Item Name','Cost','Selling','Total Sales','Total 
               'Jul-2025 Total Sales','Jul-2025 Total Profit',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
               'Sep-2025 Total Sales','Sep-2025 Total Profit']
+
 # Ensure all columns exist
 for col in table_cols:
     if col not in filtered_df.columns:
         filtered_df[col] = 0
+
+# Format Overall GP as percentage
+filtered_df['Overall GP'] = filtered_df['Overall GP'].apply(lambda x: f"{x:.2%}")
 
 st.dataframe(filtered_df[table_cols].sort_values('Total Sales', ascending=False))
