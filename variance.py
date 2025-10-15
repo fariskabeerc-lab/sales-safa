@@ -36,7 +36,7 @@ def load_price_list(file_path):
 # ----------------------------
 # File paths
 # ----------------------------
-sales_file = "july to sep safa2025.xlsx"  # Replace with your sales data file
+sales_file = "july to sep safa2025.Xlsx"  # Replace with your sales data file
 price_file = "price list.xlsx"            # Replace with your price list file
 
 sales_df = load_sales_data(sales_file)
