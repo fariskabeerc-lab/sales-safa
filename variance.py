@@ -74,12 +74,16 @@ if item_search or barcode_search:
     # Merge with sales data if available
     filtered_df = pd.merge(search_base, sales_df, left_on='Item Bar Code', right_on='Item Code', how='left')
 
-    # Fill missing sales/profit/GP with None
-    for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
-                'Aug-2025 Total Sales','Aug-2025 Total Profit',
-                'Sep-2025 Total Sales','Sep-2025 Total Profit',
-                'Total Sales','Total Profit','Overall GP']:
-        filtered_df[col] = filtered_df[col].where(filtered_df[col].notna(), None)
+    # Fill missing sales/profit/GP with None safely
+    sales_cols = ['Jul-2025 Total Sales','Jul-2025 Total Profit',
+                  'Aug-2025 Total Sales','Aug-2025 Total Profit',
+                  'Sep-2025 Total Sales','Sep-2025 Total Profit',
+                  'Total Sales','Total Profit','Overall GP']
+    for col in sales_cols:
+        if col in filtered_df.columns:
+            filtered_df[col] = filtered_df[col].where(filtered_df[col].notna(), None)
+        else:
+            filtered_df[col] = None
 
     # Category column
     if 'Category' not in filtered_df.columns:
@@ -177,11 +181,10 @@ if not (item_search or barcode_search):
 # ================================
 st.markdown("### 📝 Item-wise Details")
 
-table_cols = ['Item Bar Code','Item Name','Cost','Selling',
+table_cols = ['Item Bar Code','Item Name','Cost','Selling','Total Sales','Total Profit','Overall GP',
               'Jul-2025 Total Sales','Jul-2025 Total Profit',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
-              'Sep-2025 Total Sales','Sep-2025 Total Profit',
-              'Total Sales','Total Profit','Overall GP']
+              'Sep-2025 Total Sales','Sep-2025 Total Profit']
 
 # Ensure all columns exist
 for col in table_cols:
