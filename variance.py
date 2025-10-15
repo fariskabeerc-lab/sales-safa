@@ -6,7 +6,7 @@ import plotly.express as px
 # Page Config
 # ================================
 st.set_page_config(page_title="Sales & Profit Dashboard", layout="wide")
-st.title("📊 Sales & Profit Insights Dashboard")
+st.title("📊 Sales & Profit Insights(Jul-Sep)")
 
 # ================================
 # Load Data
