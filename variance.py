@@ -12,7 +12,7 @@ st.title("📊 Sales & Profit Insights Dashboard")
 # Load Data (Cached for Speed)
 # ================================
 @st.cache_data
-def load_data(file_path):
+def load_sales_data(file_path):
     df = pd.read_excel(file_path)
     # Calculate GP
     df['Jul-2025 GP'] = df['Jul-2025 Total Profit'] / df['Jul-2025 Total Sales'].replace(0, 1)
@@ -24,11 +24,25 @@ def load_data(file_path):
     df['Overall GP'] = df['Total Profit'] / df['Total Sales'].replace(0, 1)
     return df
 
+@st.cache_data
+def load_price_list(file_path):
+    df_price = pd.read_excel(file_path)
+    return df_price
+
 # ----------------------------
-# File path (replace this)
+# File paths
 # ----------------------------
-file_path = "july to sep safa2025.Xlsx"  # <-- Replace with your Excel file path
-df = load_data(file_path)
+sales_file = "sales_data.xlsx"       # Replace with your sales data file
+price_file = "price list.xlsx"       # Replace with your price list file
+
+sales_df = load_sales_data(sales_file)
+price_df = load_price_list(price_file)
+
+# ================================
+# Merge Price Data
+# ================================
+# Merge on Item Code / Bar Code
+merged_df = pd.merge(sales_df, price_df, left_on='Item Code', right_on='Item Bar Code', how='left')
 
 # ================================
 # Sidebar Filters
@@ -36,21 +50,20 @@ df = load_data(file_path)
 st.sidebar.header("Filters")
 
 # Single-select Category filter
-categories = list(df['Category'].unique())
+categories = list(merged_df['Category'].unique())
 categories.sort()
-categories.insert(0, "All")  # Add 'All' option
+categories.insert(0, "All")
 selected_category = st.sidebar.selectbox("Select Category", categories)
 
-# Item search
+# Item and Barcode search
 item_search = st.sidebar.text_input("Search Item Name")
-barcode_search = st.sidebar.text_input("Search Item Code")
+barcode_search = st.sidebar.text_input("Search Item Bar Code")
 
 # ================================
 # Apply Filters
 # ================================
-filtered_df = df.copy()
+filtered_df = merged_df.copy()
 
-# If item search is used, show that first (item has higher priority than category)
 if item_search:
     filtered_df = filtered_df[filtered_df['Items'].str.contains(item_search, case=False, na=False)]
 elif barcode_search:
@@ -59,7 +72,7 @@ elif selected_category != "All":
     filtered_df = filtered_df[filtered_df['Category'] == selected_category]
 
 # ================================
-# Key Metrics (No $ Sign)
+# Key Metrics
 # ================================
 total_sales = filtered_df['Total Sales'].sum()
 total_profit = filtered_df['Total Profit'].sum()
@@ -76,7 +89,6 @@ col3.metric("Overall GP", f"{overall_gp:.2%}")
 # ================================
 st.markdown("### 📅 Month-wise Performance")
 
-# Aggregate month-wise sales & profit
 months = ['Jul-2025', 'Aug-2025', 'Sep-2025']
 month_data = []
 
@@ -110,9 +122,11 @@ if not item_search:
     st.plotly_chart(fig_gp, use_container_width=True)
 
 # ================================
-# Item-wise Table
+# Item-wise Table (Cost & Selling first)
 # ================================
 st.markdown("### 📝 Item-wise Details")
-st.dataframe(filtered_df[['Item Code', 'Items', 'Category', 'Jul-2025 Total Sales', 'Jul-2025 Total Profit', 
-                          'Aug-2025 Total Sales', 'Aug-2025 Total Profit', 
-                          'Sep-2025 Total Sales', 'Sep-2025 Total Profit', 'Total Sales', 'Total Profit', 'Overall GP']].sort_values('Total Sales', ascending=False))
+st.dataframe(filtered_df[['Item Bar Code','Item Name','Cost','Selling',
+                          'Jul-2025 Total Sales','Jul-2025 Total Profit',
+                          'Aug-2025 Total Sales','Aug-2025 Total Profit',
+                          'Sep-2025 Total Sales','Sep-2025 Total Profit',
+                          'Total Sales','Total Profit','Overall GP']].sort_values('Total Sales', ascending=False))
