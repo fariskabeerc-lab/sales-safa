@@ -22,18 +22,22 @@ def load_sales_data(file_path):
     df['Total Sales'] = df[['Jul-2025 Total Sales', 'Aug-2025 Total Sales', 'Sep-2025 Total Sales']].sum(axis=1)
     df['Total Profit'] = df[['Jul-2025 Total Profit', 'Aug-2025 Total Profit', 'Sep-2025 Total Profit']].sum(axis=1)
     df['Overall GP'] = df['Total Profit'] / df['Total Sales'].replace(0, 1)
+    # Ensure Item Code is string
+    df['Item Code'] = df['Item Code'].astype(str)
     return df
 
 @st.cache_data
 def load_price_list(file_path):
     df_price = pd.read_excel(file_path)
+    # Ensure Bar Code is string
+    df_price['Item Bar Code'] = df_price['Item Bar Code'].astype(str)
     return df_price
 
 # ----------------------------
 # File paths
 # ----------------------------
-sales_file = "july to sep safa2025.Xlsx"       # Replace with your sales data file
-price_file = "price list.xlsx"       # Replace with your price list file
+sales_file = "july to sep safa2025.xlsx"  # Replace with your sales data file
+price_file = "price list.xlsx"            # Replace with your price list file
 
 sales_df = load_sales_data(sales_file)
 price_df = load_price_list(price_file)
@@ -41,8 +45,11 @@ price_df = load_price_list(price_file)
 # ================================
 # Merge Price Data
 # ================================
-# Merge on Item Code / Bar Code
 merged_df = pd.merge(sales_df, price_df, left_on='Item Code', right_on='Item Bar Code', how='left')
+
+# Fill missing Cost/Selling with 0
+merged_df['Cost'] = merged_df['Cost'].fillna(0)
+merged_df['Selling'] = merged_df['Selling'].fillna(0)
 
 # ================================
 # Sidebar Filters
@@ -64,10 +71,11 @@ barcode_search = st.sidebar.text_input("Search Item Bar Code")
 # ================================
 filtered_df = merged_df.copy()
 
+# Priority: Item search > Barcode search > Category
 if item_search:
     filtered_df = filtered_df[filtered_df['Items'].str.contains(item_search, case=False, na=False)]
 elif barcode_search:
-    filtered_df = filtered_df[filtered_df['Item Code'].astype(str).str.contains(barcode_search, case=False, na=False)]
+    filtered_df = filtered_df[filtered_df['Item Code'].str.contains(barcode_search, case=False, na=False)]
 elif selected_category != "All":
     filtered_df = filtered_df[filtered_df['Category'] == selected_category]
 
