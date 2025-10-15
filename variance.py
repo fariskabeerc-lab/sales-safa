@@ -39,14 +39,6 @@ for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
     if col not in sales_df.columns:
         sales_df[col] = 0
 
-# Calculate GP and totals
-sales_df['Jul-2025 GP'] = sales_df['Jul-2025 Total Profit'] / sales_df['Jul-2025 Total Sales'].replace(0,1)
-sales_df['Aug-2025 GP'] = sales_df['Aug-2025 Total Profit'] / sales_df['Aug-2025 Total Sales'].replace(0,1)
-sales_df['Sep-2025 GP'] = sales_df['Sep-2025 Total Profit'] / sales_df['Sep-2025 Total Sales'].replace(0,1)
-sales_df['Total Sales'] = sales_df[['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']].sum(axis=1)
-sales_df['Total Profit'] = sales_df[['Jul-2025 Total Profit','Aug-2025 Total Profit','Sep-2025 Total Profit']].sum(axis=1)
-sales_df['Overall GP'] = sales_df['Total Profit'] / sales_df['Total Sales'].replace(0,1)
-
 # ================================
 # Sidebar Filters
 # ================================
@@ -77,13 +69,12 @@ if item_search or barcode_search:
     # Fill missing sales/profit/GP with None safely
     sales_cols = ['Jul-2025 Total Sales','Jul-2025 Total Profit',
                   'Aug-2025 Total Sales','Aug-2025 Total Profit',
-                  'Sep-2025 Total Sales','Sep-2025 Total Profit',
-                  'Total Sales','Total Profit','Overall GP']
+                  'Sep-2025 Total Sales','Sep-2025 Total Profit']
     for col in sales_cols:
-        if col in filtered_df.columns:
-            filtered_df[col] = filtered_df[col].where(filtered_df[col].notna(), None)
-        else:
+        if col not in filtered_df.columns:
             filtered_df[col] = None
+        else:
+            filtered_df[col] = filtered_df[col].where(filtered_df[col].notna(), None)
 
     # Category column
     if 'Category' not in filtered_df.columns:
@@ -103,18 +94,24 @@ else:
 if selected_category != "All" and not (item_search or barcode_search):
     filtered_df = filtered_df[filtered_df['Category'] == selected_category]
 
-# Ensure sales columns exist for aggregation
-for col in ['Total Sales','Total Profit']:
-    if col not in filtered_df.columns:
-        filtered_df[col] = 0
-    else:
-        filtered_df[col] = filtered_df[col].fillna(0)
+# ================================
+# Recalculate Total Sales/Profit per row for table
+# ================================
+def compute_row_totals(row):
+    sales_cols = ['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']
+    profit_cols = ['Jul-2025 Total Profit','Aug-2025 Total Profit','Sep-2025 Total Profit']
+
+    total_sales = sum([row[col] if pd.notna(row[col]) else 0 for col in sales_cols])
+    total_profit = sum([row[col] if pd.notna(row[col]) else 0 for col in profit_cols])
+    overall_gp = (total_profit / total_sales) if total_sales != 0 else None
+    return pd.Series([total_sales, total_profit, overall_gp])
+
+filtered_df[['Total Sales','Total Profit','Overall GP']] = filtered_df.apply(compute_row_totals, axis=1)
 
 # ================================
 # Key Metrics
 # ================================
 if not (item_search or barcode_search):
-    # Default sales metrics
     total_sales = filtered_df['Total Sales'].sum()
     total_profit = filtered_df['Total Profit'].sum()
     overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
@@ -124,9 +121,8 @@ if not (item_search or barcode_search):
     col2.metric("Total Profit", f"{total_profit:,.0f}")
     col3.metric("Overall GP", f"{overall_gp:.2%}")
 else:
-    # Item search: metrics only for actual numeric sales
-    total_sales = filtered_df['Total Sales'].dropna().sum()
-    total_profit = filtered_df['Total Profit'].dropna().sum()
+    total_sales = filtered_df['Total Sales'].sum()
+    total_profit = filtered_df['Total Profit'].sum()
     overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
     st.markdown("### 🔑 Key Metrics for Searched Items")
     col1, col2, col3 = st.columns(3)
@@ -181,7 +177,7 @@ if not (item_search or barcode_search):
 # ================================
 st.markdown("### 📝 Item-wise Details")
 
-table_cols = ['Item Bar Code','Item Name','Cost','Selling','Total Sales','Total Profit','Overall GP',
+table_cols = ['Item Bar Code','Item Name','Cost','Selling', 'Total Sales','Total Profit','Overall GP',
               'Jul-2025 Total Sales','Jul-2025 Total Profit',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
               'Sep-2025 Total Sales','Sep-2025 Total Profit']
