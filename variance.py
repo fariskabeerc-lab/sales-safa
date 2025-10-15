@@ -66,21 +66,26 @@ if item_search or barcode_search:
     # Merge with sales data if available
     filtered_df = pd.merge(search_base, sales_df, left_on='Item Bar Code', right_on='Item Code', how='left')
 
-    # Fill missing sales/profit/GP with None safely
+    # Fill missing sales/profit columns
     sales_cols = ['Jul-2025 Total Sales','Jul-2025 Total Profit',
                   'Aug-2025 Total Sales','Aug-2025 Total Profit',
                   'Sep-2025 Total Sales','Sep-2025 Total Profit']
     for col in sales_cols:
         if col not in filtered_df.columns:
-            filtered_df[col] = None
+            filtered_df[col] = 0
         else:
-            filtered_df[col] = filtered_df[col].where(filtered_df[col].notna(), None)
+            filtered_df[col] = filtered_df[col].fillna(0)
 
     # Category column
     if 'Category' not in filtered_df.columns:
         filtered_df['Category'] = 'Unknown'
     else:
         filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
+
+    # --- Handle case when no match is found ---
+    if filtered_df.empty:
+        st.warning("❌ Item not found in the data.")
+        st.stop()
 
 else:
     # Default: show sales data
@@ -95,7 +100,7 @@ if selected_category != "All" and not (item_search or barcode_search):
     filtered_df = filtered_df[filtered_df['Category'] == selected_category]
 
 # ================================
-# Recalculate Total Sales/Profit per row for table
+# Recalculate Total Sales/Profit per row
 # ================================
 def compute_row_totals(row):
     sales_cols = ['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']
@@ -103,7 +108,7 @@ def compute_row_totals(row):
 
     total_sales = sum([row[col] if pd.notna(row[col]) else 0 for col in sales_cols])
     total_profit = sum([row[col] if pd.notna(row[col]) else 0 for col in profit_cols])
-    overall_gp = (total_profit / total_sales) if total_sales != 0 else None
+    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
     return pd.Series([total_sales, total_profit, overall_gp])
 
 filtered_df[['Total Sales','Total Profit','Overall GP']] = filtered_df.apply(compute_row_totals, axis=1)
@@ -131,7 +136,7 @@ else:
     col3.metric("Overall GP", f"{overall_gp:.2%}")
 
 # ================================
-# Monthly Performance Graph (only if no item search)
+# Monthly Performance Graph
 # ================================
 if not (item_search or barcode_search):
     st.markdown("### 📅 Month-wise Performance")
@@ -157,7 +162,7 @@ if not (item_search or barcode_search):
     st.plotly_chart(fig_monthly, use_container_width=True)
 
 # ================================
-# Category-wise Analysis (only if no item search)
+# Category-wise Analysis
 # ================================
 if not (item_search or barcode_search):
     category_summary = filtered_df.groupby('Category').agg({'Total Sales':'sum','Total Profit':'sum'}).reset_index()
@@ -173,17 +178,17 @@ if not (item_search or barcode_search):
     st.plotly_chart(fig_gp, use_container_width=True)
 
 # ================================
-# Item-wise Table (always show)
+# Item-wise Table
 # ================================
 st.markdown("### 📝 Item-wise Details")
 
 table_cols = ['Item Bar Code','Item Name','Cost','Selling','Total Sales','Total Profit','Overall GP',
               'Jul-2025 Total Sales','Jul-2025 Total Profit',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
-              'Sep-2025 Total Sales','Sep-2025 Total Profit',]
+              'Sep-2025 Total Sales','Sep-2025 Total Profit']
 # Ensure all columns exist
 for col in table_cols:
     if col not in filtered_df.columns:
-        filtered_df[col] = None
+        filtered_df[col] = 0
 
 st.dataframe(filtered_df[table_cols].sort_values('Total Sales', ascending=False))
