@@ -2,149 +2,222 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# ==========================================
-# PAGE CONFIG
-# ==========================================
-st.set_page_config(page_title="Sales & Inventory Dashboard", layout="wide")
-st.title("📊 Sales, Profit & Inventory Insights")
+# ================================
+# Page Config
+# ================================
+st.set_page_config(page_title="Sales & Profit Dashboard", layout="wide")
+st.title("📊 Sales & Profit Insights (Jul–Sep)")
 
-# ==========================================
-# LOAD DATA
-# ==========================================
+# ================================
+# Load Data
+# ================================
 @st.cache_data
-def load_data(file_path):
-    try:
-        df = pd.read_excel(file_path)
-        df.columns = df.columns.str.strip()
-        return df
-    except Exception:
-        return None
+def load_sales_data(file_path):
+    df = pd.read_excel(file_path)
+    df["Item Code"] = df["Item Code"].astype(str)
+    return df
 
-file_path = st.file_uploader("📂 Upload your Excel file", type=["xlsx"])
+@st.cache_data
+def load_price_list(file_path):
+    df = pd.read_excel(file_path)
+    df["Item Bar Code"] = df["Item Bar Code"].astype(str)
+    return df
 
-if file_path:
-    df = load_data(file_path)
+# ================================
+# File Paths (Update if needed)
+# ================================
+sales_file = "july to sep safa2025.Xlsx"
+price_file = "price list.xlsx"
 
-    if df is None or df.empty:
-        st.error("❌ Failed to load data or file is empty.")
-    else:
-        # ===================================================
-        # CATEGORY FILTER
-        # ===================================================
-        categories = sorted(df["Category"].dropna().unique())
-        selected_category = st.selectbox("🔍 Filter by Category", ["All"] + list(categories))
+sales_df = load_sales_data(sales_file)
+price_df = load_price_list(price_file)
 
-        if selected_category != "All":
-            filtered_df = df[df["Category"] == selected_category].copy()
-        else:
-            filtered_df = df.copy()
+# Fill missing monthly columns if absent
+for col in [
+    "Jul-2025 Total Sales", "Jul-2025 Total Profit",
+    "Aug-2025 Total Sales", "Aug-2025 Total Profit",
+    "Sep-2025 Total Sales", "Sep-2025 Total Profit"
+]:
+    if col not in sales_df.columns:
+        sales_df[col] = 0
 
-        # ===================================================
-        # COMPUTE TOTALS (FIXED VERSION)
-        # ===================================================
-        def compute_row_totals(row):
-            try:
-                sales_cols = [col for col in row.index if "Sales" in col]
-                profit_cols = [col for col in row.index if "Profit" in col or "GP" in col]
+# ================================
+# Sidebar Filters
+# ================================
+st.sidebar.header("Filters")
+item_search = st.sidebar.text_input("🔍 Search Item Name")
+barcode_search = st.sidebar.text_input("🔍 Search Item Bar Code")
 
-                total_sales = row[sales_cols].sum(skipna=True) if sales_cols else 0
-                total_profit = row[profit_cols].sum(skipna=True) if profit_cols else 0
-                overall_gp = (total_profit / total_sales * 100) if total_sales != 0 else 0
+# Category filter
+all_categories = sorted(sales_df["Category"].dropna().unique().tolist())
+all_categories.insert(0, "All")
+selected_category = st.sidebar.selectbox("📂 Select Category", all_categories)
 
-                return pd.Series([total_sales, total_profit, overall_gp])
-            except Exception:
-                return pd.Series([0, 0, 0])
+# ================================
+# Filter Logic
+# ================================
+if item_search or barcode_search:
+    # Base: price list
+    search_base = price_df.copy()
 
-        filtered_df[["Total Sales", "Total Profit", "Overall GP"]] = filtered_df.apply(
-            compute_row_totals, axis=1
-        )
+    if item_search:
+        search_base = search_base[
+            search_base["Item Name"].str.contains(item_search, case=False, na=False)
+        ]
+    if barcode_search:
+        search_base = search_base[
+            search_base["Item Bar Code"].str.contains(barcode_search, case=False, na=False)
+        ]
 
-        # ===================================================
-        # MAIN TABLE (ITEMWISE)
-        # ===================================================
-        st.subheader("📦 Itemwise Overview")
-        st.dataframe(
-            filtered_df[
-                [
-                    "Item Name",
-                    "Item Bar Code",
-                    "Category",
-                    "Cost",
-                    "Selling",
-                    "Stock",
-                    "Margin%",
-                    "Stock Value",
-                    "Total Sales",
-                    "Total Profit",
-                    "Overall GP",
-                ]
-            ],
-            use_container_width=True,
-        )
-
-        # ===================================================
-        # INSIGHTS TABLE: ZERO SALES ITEMS
-        # ===================================================
-        zero_sales_df = filtered_df[filtered_df["Total Sales"] == 0]
-        st.subheader("🛑 Items with Stock Value but Zero Sales")
-        st.write(f"Total such items: {len(zero_sales_df)}")
-        st.dataframe(
-            zero_sales_df[
-                [
-                    "Item Name",
-                    "Category",
-                    "Stock",
-                    "Stock Value",
-                    "Selling",
-                    "Margin%",
-                ]
-            ],
-            use_container_width=True,
-        )
-
-        # ===================================================
-        # CATEGORY SUMMARY
-        # ===================================================
-        st.subheader("📈 Category Summary")
-        category_summary = (
-            filtered_df.groupby("Category")[["Total Sales", "Total Profit", "Stock Value"]]
-            .sum()
-            .reset_index()
-        )
-        st.dataframe(category_summary, use_container_width=True)
-
-        # ===================================================
-        # CHARTS
-        # ===================================================
-        st.subheader("📊 Top Performing Items (By Sales)")
-        top_sales = (
-            filtered_df.sort_values("Total Sales", ascending=False)
-            .head(20)
-            .reset_index(drop=True)
-        )
-        fig_sales = px.bar(
-            top_sales,
-            x="Item Name",
-            y="Total Sales",
-            color="Category",
-            title="Top 20 Items by Sales",
-        )
-        st.plotly_chart(fig_sales, use_container_width=True)
-
-        st.subheader("💰 Top Profitable Items")
-        top_profit = (
-            filtered_df.sort_values("Total Profit", ascending=False)
-            .head(20)
-            .reset_index(drop=True)
-        )
-        fig_profit = px.bar(
-            top_profit,
-            x="Item Name",
-            y="Total Profit",
-            color="Category",
-            title="Top 20 Items by Profit",
-        )
-        st.plotly_chart(fig_profit, use_container_width=True)
+    # Merge sales + price data
+    filtered_df = pd.merge(
+        search_base,
+        sales_df,
+        left_on="Item Bar Code",
+        right_on="Item Code",
+        how="left"
+    )
 
 else:
-    st.info("👆 Please upload your Excel file to start.")
+    filtered_df = pd.merge(
+        price_df,
+        sales_df,
+        left_on="Item Bar Code",
+        right_on="Item Code",
+        how="left"
+    )
+
+# Clean & fill
+filtered_df["Category"] = filtered_df["Category"].fillna("Unknown")
+
+# Apply category filter to everything
+if selected_category != "All":
+    filtered_df = filtered_df[filtered_df["Category"] == selected_category]
+
+# ================================
+# Compute Totals
+# ================================
+def compute_row_totals(row):
+    sales_cols = ["Jul-2025 Total Sales", "Aug-2025 Total Sales", "Sep-2025 Total Sales"]
+    profit_cols = ["Jul-2025 Total Profit", "Aug-2025 Total Profit", "Sep-2025 Total Profit"]
+
+    total_sales = sum([row.get(c, 0) for c in sales_cols if pd.notna(row.get(c, 0))])
+    total_profit = sum([row.get(c, 0) for c in profit_cols if pd.notna(row.get(c, 0))])
+    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
+
+    return pd.Series([total_sales, total_profit, overall_gp])
+
+filtered_df[["Total Sales", "Total Profit", "Overall GP"]] = filtered_df.apply(
+    compute_row_totals, axis=1
+)
+
+# ================================
+# Key Metrics
+# ================================
+st.markdown("### 🔑 Key Metrics")
+col1, col2, col3 = st.columns(3)
+total_sales = filtered_df["Total Sales"].sum()
+total_profit = filtered_df["Total Profit"].sum()
+overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
+col1.metric("Total Sales", f"{total_sales:,.0f}")
+col2.metric("Total Profit", f"{total_profit:,.0f}")
+col3.metric("Overall GP", f"{overall_gp:.2%}")
+
+# ================================
+# Month-wise Performance
+# ================================
+st.markdown("### 📅 Month-wise Performance")
+months = ["Jul-2025", "Aug-2025", "Sep-2025"]
+month_data = []
+
+for month in months:
+    sales_col = f"{month} Total Sales"
+    profit_col = f"{month} Total Profit"
+    month_sales = filtered_df[sales_col].sum() if sales_col in filtered_df.columns else 0
+    month_profit = filtered_df[profit_col].sum() if profit_col in filtered_df.columns else 0
+    month_data.extend([
+        {"Month": month, "Type": "Sales", "Value": month_sales},
+        {"Month": month, "Type": "Profit", "Value": month_profit}
+    ])
+
+monthly_df = pd.DataFrame(month_data)
+fig_monthly = px.bar(
+    monthly_df,
+    x="Month",
+    y="Value",
+    color="Type",
+    barmode="group",
+    text="Value",
+    title="Monthly Sales & Profit"
+)
+st.plotly_chart(fig_monthly, use_container_width=True)
+
+# ================================
+# Category-wise Analysis
+# ================================
+if "Category" in filtered_df.columns:
+    st.markdown("### 🧩 Category-wise Analysis")
+    category_summary = (
+        filtered_df.groupby("Category")[["Total Sales", "Total Profit"]]
+        .sum()
+        .reset_index()
+    )
+    category_summary["GP"] = category_summary["Total Profit"] / category_summary["Total Sales"].replace(0, 1)
+
+    fig_sales = px.bar(
+        category_summary,
+        x="Category",
+        y="Total Sales",
+        color="Total Sales",
+        text="Total Sales",
+        title="Total Sales by Category"
+    )
+    st.plotly_chart(fig_sales, use_container_width=True)
+
+    fig_profit = px.bar(
+        category_summary,
+        x="Category",
+        y="Total Profit",
+        color="Total Profit",
+        text="Total Profit",
+        title="Total Profit by Category"
+    )
+    st.plotly_chart(fig_profit, use_container_width=True)
+
+    fig_gp = px.bar(
+        category_summary,
+        x="Category",
+        y="GP",
+        color="GP",
+        text=category_summary["GP"].apply(lambda x: f"{x:.2%}"),
+        title="Gross Profit % by Category"
+    )
+    st.plotly_chart(fig_gp, use_container_width=True)
+
+# ================================
+# Item-wise Table
+# ================================
+st.markdown("### 📝 Item-wise Details")
+
+table_cols = [
+    "Item Bar Code", "Item Name", "Category",
+    "Cost", "Selling", "Stock",
+    "Total Sales", "Total Profit", "Overall GP",
+    "Jul-2025 Total Sales", "Jul-2025 Total Profit",
+    "Aug-2025 Total Sales", "Aug-2025 Total Profit",
+    "Sep-2025 Total Sales", "Sep-2025 Total Profit"
+]
+
+# Ensure all exist
+for col in table_cols:
+    if col not in filtered_df.columns:
+        filtered_df[col] = 0
+
+# Format GP nicely
+filtered_df["Overall GP"] = filtered_df["Overall GP"].apply(lambda x: f"{x:.2%}")
+
+# Show table sorted by total sales
+st.dataframe(
+    filtered_df[table_cols].sort_values("Total Sales", ascending=False),
+    use_container_width=True
+)
