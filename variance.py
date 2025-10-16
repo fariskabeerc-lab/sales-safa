@@ -56,7 +56,7 @@ selected_category = st.sidebar.selectbox("Select Category", all_categories)
 # Filter Logic
 # ================================
 if item_search or barcode_search:
-    # Search in price list
+    # Search logic stays exactly the same
     search_base = price_df.copy()
     if item_search:
         search_base = search_base[search_base['Item Name'].str.contains(item_search, case=False, na=False)]
@@ -82,14 +82,21 @@ if item_search or barcode_search:
     else:
         filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
 
-    # --- Handle case when no match is found ---
+    # Handle case when no match is found
     if filtered_df.empty:
         st.warning("❌ Item not found in the data.")
         st.stop()
 
 else:
     # Default view (no search)
-    filtered_df = sales_df.copy()
+    # Merge sales_df with price_df to get Item Name and Item Bar Code
+    filtered_df = pd.merge(sales_df, price_df[['Item Bar Code','Item Name']], 
+                           left_on='Item Code', right_on='Item Bar Code', how='left')
+    
+    # Fill missing Item Name
+    filtered_df['Item Name'] = filtered_df['Item Name'].fillna('Unknown')
+
+    # Category column
     if 'Category' not in filtered_df.columns:
         filtered_df['Category'] = 'Unknown'
     else:
@@ -181,12 +188,6 @@ table_cols = ['Item Bar Code','Item Name','Cost','Selling','Stock',
               'Jul-2025 Total Sales','Jul-2025 Total Profit',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
               'Sep-2025 Total Sales','Sep-2025 Total Profit']
-
-# Ensure Item Name and Bar Code exist
-if 'Item Bar Code' not in filtered_df.columns:
-    filtered_df['Item Bar Code'] = filtered_df.get('Item Code', 'Unknown')
-if 'Item Name' not in filtered_df.columns:
-    filtered_df['Item Name'] = 'Unknown'
 
 # Ensure numeric columns exist only
 numeric_cols = ['Cost','Selling','Stock',
