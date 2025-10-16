@@ -2,195 +2,149 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# ================================
-# Page Config
-# ================================
-st.set_page_config(page_title="Sales & Profit Dashboard", layout="wide")
-st.title("📊 Sales & Profit Insights (Jul-Sep)")
+# ==========================================
+# PAGE CONFIG
+# ==========================================
+st.set_page_config(page_title="Sales & Inventory Dashboard", layout="wide")
+st.title("📊 Sales, Profit & Inventory Insights")
 
-# ================================
-# Load Data
-# ================================
+# ==========================================
+# LOAD DATA
+# ==========================================
 @st.cache_data
-def load_sales_data(file_path):
-    df = pd.read_excel(file_path)
-    df['Item Code'] = df['Item Code'].astype(str)
-    return df
+def load_data(file_path):
+    try:
+        df = pd.read_excel(file_path)
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception:
+        return None
 
-@st.cache_data
-def load_price_list(file_path):
-    df_price = pd.read_excel(file_path)
-    df_price['Item Bar Code'] = df_price['Item Bar Code'].astype(str)
-    return df_price
+file_path = st.file_uploader("📂 Upload your Excel file", type=["xlsx"])
 
-# ================================
-# File paths
-# ================================
-sales_file = "july to sep safa2025.Xlsx"
-price_file = "price list.xlsx"
+if file_path:
+    df = load_data(file_path)
 
-sales_df = load_sales_data(sales_file)
-price_df = load_price_list(price_file)
-
-# Fill missing sales columns
-for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
-            'Aug-2025 Total Sales','Aug-2025 Total Profit',
-            'Sep-2025 Total Sales','Sep-2025 Total Profit']:
-    if col not in sales_df.columns:
-        sales_df[col] = 0
-
-# ================================
-# Sidebar Filters
-# ================================
-st.sidebar.header("Filters")
-item_search = st.sidebar.text_input("Search Item Name")
-barcode_search = st.sidebar.text_input("Search Item Bar Code")
-
-# Category list from both sources
-all_categories = pd.concat([
-    sales_df['Category'] if 'Category' in sales_df.columns else pd.Series(),
-    price_df['Category'] if 'Category' in price_df.columns else pd.Series()
-]).dropna().unique().tolist()
-all_categories.sort()
-all_categories.insert(0, "All")
-selected_category = st.sidebar.selectbox("Select Category", all_categories)
-
-# ================================
-# Filter Logic
-# ================================
-if item_search or barcode_search:
-    # --- SEARCH MODE ---
-    search_base = price_df.copy()
-    if item_search:
-        search_base = search_base[search_base['Item Name'].str.contains(item_search, case=False, na=False)]
-    if barcode_search:
-        search_base = search_base[search_base['Item Bar Code'].str.contains(barcode_search, case=False, na=False)]
-
-    # Merge with sales data
-    filtered_df = pd.merge(search_base, sales_df, left_on='Item Bar Code', right_on='Item Code', how='left')
-
-else:
-    # --- DEFAULT MODE ---
-    # Merge both datasets for full view (includes cost, selling, stock)
-    filtered_df = pd.merge(price_df, sales_df, left_on='Item Bar Code', right_on='Item Code', how='left')
-
-# ================================
-# Clean Up and Fill Missing Values
-# ================================
-sales_cols = ['Jul-2025 Total Sales','Jul-2025 Total Profit',
-              'Aug-2025 Total Sales','Aug-2025 Total Profit',
-              'Sep-2025 Total Sales','Sep-2025 Total Profit']
-
-for col in sales_cols:
-    if col not in filtered_df.columns:
-        filtered_df[col] = 0
+    if df is None or df.empty:
+        st.error("❌ Failed to load data or file is empty.")
     else:
-        filtered_df[col] = filtered_df[col].fillna(0)
+        # ===================================================
+        # CATEGORY FILTER
+        # ===================================================
+        categories = sorted(df["Category"].dropna().unique())
+        selected_category = st.selectbox("🔍 Filter by Category", ["All"] + list(categories))
 
-for col in ['Cost', 'Selling', 'Stock']:
-    if col not in filtered_df.columns:
-        filtered_df[col] = 0
-    else:
-        filtered_df[col] = filtered_df[col].fillna(0)
+        if selected_category != "All":
+            filtered_df = df[df["Category"] == selected_category].copy()
+        else:
+            filtered_df = df.copy()
 
-if 'Category' not in filtered_df.columns:
-    filtered_df['Category'] = 'Unknown'
+        # ===================================================
+        # COMPUTE TOTALS (FIXED VERSION)
+        # ===================================================
+        def compute_row_totals(row):
+            try:
+                sales_cols = [col for col in row.index if "Sales" in col]
+                profit_cols = [col for col in row.index if "Profit" in col or "GP" in col]
+
+                total_sales = row[sales_cols].sum(skipna=True) if sales_cols else 0
+                total_profit = row[profit_cols].sum(skipna=True) if profit_cols else 0
+                overall_gp = (total_profit / total_sales * 100) if total_sales != 0 else 0
+
+                return pd.Series([total_sales, total_profit, overall_gp])
+            except Exception:
+                return pd.Series([0, 0, 0])
+
+        filtered_df[["Total Sales", "Total Profit", "Overall GP"]] = filtered_df.apply(
+            compute_row_totals, axis=1
+        )
+
+        # ===================================================
+        # MAIN TABLE (ITEMWISE)
+        # ===================================================
+        st.subheader("📦 Itemwise Overview")
+        st.dataframe(
+            filtered_df[
+                [
+                    "Item Name",
+                    "Item Bar Code",
+                    "Category",
+                    "Cost",
+                    "Selling",
+                    "Stock",
+                    "Margin%",
+                    "Stock Value",
+                    "Total Sales",
+                    "Total Profit",
+                    "Overall GP",
+                ]
+            ],
+            use_container_width=True,
+        )
+
+        # ===================================================
+        # INSIGHTS TABLE: ZERO SALES ITEMS
+        # ===================================================
+        zero_sales_df = filtered_df[filtered_df["Total Sales"] == 0]
+        st.subheader("🛑 Items with Stock Value but Zero Sales")
+        st.write(f"Total such items: {len(zero_sales_df)}")
+        st.dataframe(
+            zero_sales_df[
+                [
+                    "Item Name",
+                    "Category",
+                    "Stock",
+                    "Stock Value",
+                    "Selling",
+                    "Margin%",
+                ]
+            ],
+            use_container_width=True,
+        )
+
+        # ===================================================
+        # CATEGORY SUMMARY
+        # ===================================================
+        st.subheader("📈 Category Summary")
+        category_summary = (
+            filtered_df.groupby("Category")[["Total Sales", "Total Profit", "Stock Value"]]
+            .sum()
+            .reset_index()
+        )
+        st.dataframe(category_summary, use_container_width=True)
+
+        # ===================================================
+        # CHARTS
+        # ===================================================
+        st.subheader("📊 Top Performing Items (By Sales)")
+        top_sales = (
+            filtered_df.sort_values("Total Sales", ascending=False)
+            .head(20)
+            .reset_index(drop=True)
+        )
+        fig_sales = px.bar(
+            top_sales,
+            x="Item Name",
+            y="Total Sales",
+            color="Category",
+            title="Top 20 Items by Sales",
+        )
+        st.plotly_chart(fig_sales, use_container_width=True)
+
+        st.subheader("💰 Top Profitable Items")
+        top_profit = (
+            filtered_df.sort_values("Total Profit", ascending=False)
+            .head(20)
+            .reset_index(drop=True)
+        )
+        fig_profit = px.bar(
+            top_profit,
+            x="Item Name",
+            y="Total Profit",
+            color="Category",
+            title="Top 20 Items by Profit",
+        )
+        st.plotly_chart(fig_profit, use_container_width=True)
+
 else:
-    filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
-
-# ================================
-# Apply Category Filter (Global)
-# ================================
-if selected_category != "All":
-    filtered_df = filtered_df[filtered_df['Category'] == selected_category]
-
-# ================================
-# Recalculate Totals
-# ================================
-def compute_row_totals(row):
-    sales_cols = ['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']
-    profit_cols = ['Jul-2025 Total Profit','Aug-2025 Total Profit','Sep-2025 Total Profit']
-    total_sales = sum([row[col] if pd.notna(row[col]) else 0 for col in sales_cols])
-    total_profit = sum([row[col] if pd.notna(row[col]) else 0 for col in profit_cols])
-    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
-    return pd.Series([total_sales, total_profit, overall_gp])
-
-filtered_df[['Total Sales','Total Profit','Overall GP']] = filtered_df.apply(compute_row_totals, axis=1)
-
-# ================================
-# Key Metrics
-# ================================
-total_sales = filtered_df['Total Sales'].sum()
-total_profit = filtered_df['Total Profit'].sum()
-overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
-
-if not (item_search or barcode_search):
-    st.markdown(f"### 🔑 Key Metrics {'(All Categories)' if selected_category == 'All' else f'({selected_category})'}")
-else:
-    st.markdown("### 🔑 Key Metrics for Searched Items")
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Sales", f"{total_sales:,.0f}")
-col2.metric("Total Profit", f"{total_profit:,.0f}")
-col3.metric("Overall GP", f"{overall_gp:.2%}")
-
-# ================================
-# Monthly Performance
-# ================================
-if not (item_search or barcode_search):
-    st.markdown("### 📅 Month-wise Performance")
-    months = ['Jul-2025','Aug-2025','Sep-2025']
-    month_data = []
-
-    for month in months:
-        sales_col = f'{month} Total Sales'
-        profit_col = f'{month} Total Profit'
-        month_sales = filtered_df[sales_col].sum() if sales_col in filtered_df.columns else 0
-        month_profit = filtered_df[profit_col].sum() if profit_col in filtered_df.columns else 0
-        month_data.append({'Month': month, 'Type': 'Sales', 'Value': month_sales})
-        month_data.append({'Month': month, 'Type': 'Profit', 'Value': month_profit})
-
-    monthly_df = pd.DataFrame(month_data)
-    fig_monthly = px.bar(
-        monthly_df, x='Month', y='Value', color='Type', barmode='group',
-        text='Value', title=f"Monthly Sales & Profit ({selected_category})"
-    )
-    st.plotly_chart(fig_monthly, use_container_width=True)
-
-# ================================
-# Category-wise Summary (Respects Filter)
-# ================================
-if not (item_search or barcode_search):
-    category_summary = filtered_df.groupby('Category').agg({'Total Sales':'sum','Total Profit':'sum'}).reset_index()
-    category_summary['GP'] = category_summary['Total Profit'] / category_summary['Total Sales'].replace(0,1)
-
-    st.markdown("### 🏷 Category-wise Overview")
-    fig_sales = px.bar(category_summary, x='Category', y='Total Sales', color='Total Sales', text='Total Sales', title="Total Sales by Category")
-    st.plotly_chart(fig_sales, use_container_width=True)
-
-    fig_profit = px.bar(category_summary, x='Category', y='Total Profit', color='Total Profit', text='Total Profit', title="Total Profit by Category")
-    st.plotly_chart(fig_profit, use_container_width=True)
-
-    fig_gp = px.bar(category_summary, x='Category', y='GP', color='GP', text=category_summary['GP'].apply(lambda x:f"{x:.2%}"), title="Gross Profit % by Category")
-    st.plotly_chart(fig_gp, use_container_width=True)
-
-# ================================
-# Item-wise Table (Full Details + Filtered)
-# ================================
-st.markdown("### 📝 Item-wise Details")
-
-table_cols = [
-    'Item Bar Code','Item Name','Cost','Selling','Stock',
-    'Total Sales','Total Profit','Overall GP',
-    'Jul-2025 Total Sales','Jul-2025 Total Profit',
-    'Aug-2025 Total Sales','Aug-2025 Total Profit',
-    'Sep-2025 Total Sales','Sep-2025 Total Profit'
-]
-
-for col in table_cols:
-    if col not in filtered_df.columns:
-        filtered_df[col] = 0
-
-filtered_df['Overall GP'] = filtered_df['Overall GP'].apply(lambda x: f"{x:.2%}")
-
-st.dataframe(filtered_df[table_cols].sort_values('Total Sales', ascending=False))
+    st.info("👆 Please upload your Excel file to start.")
