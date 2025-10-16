@@ -12,7 +12,6 @@ page = st.sidebar.radio("Select Page", ["Sales & Profit Insights", "Zero Stock I
 # ================================
 @st.cache_data
 def load_data(sales_file, price_file):
-    # Load sales
     sales_df = pd.read_excel(sales_file)
     sales_df['Item Code'] = sales_df['Item Code'].astype(str)
     for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
@@ -23,7 +22,6 @@ def load_data(sales_file, price_file):
         else:
             sales_df[col] = sales_df[col].fillna(0)
 
-    # Load price
     price_df = pd.read_excel(price_file)
     price_df['Item Bar Code'] = price_df['Item Bar Code'].astype(str)
     for col in ['Cost','Selling','Stock']:
@@ -32,35 +30,25 @@ def load_data(sales_file, price_file):
         else:
             price_df[col] = price_df[col].fillna(0)
 
-    # Merge
     merged_df = pd.merge(price_df, sales_df, left_on='Item Bar Code', right_on='Item Code', how='left')
 
-    # Fill sales/profit
     for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
                 'Aug-2025 Total Sales','Aug-2025 Total Profit',
                 'Sep-2025 Total Sales','Sep-2025 Total Profit']:
         merged_df[col] = merged_df[col].fillna(0)
 
-    # Category
     if 'Category' not in merged_df.columns:
         merged_df['Category'] = 'Unknown'
     else:
         merged_df['Category'] = merged_df['Category'].fillna('Unknown')
 
-    # Precompute Totals and GP
-    sales_cols = ['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']
-    profit_cols = ['Jul-2025 Total Profit','Aug-2025 Total Profit','Sep-2025 Total Profit']
-
-    merged_df['Total Sales'] = merged_df[sales_cols].sum(axis=1)
-    merged_df['Total Profit'] = merged_df[profit_cols].sum(axis=1)
-    merged_df['GP'] = merged_df.apply(lambda x: (x['Total Profit']/x['Total Sales']) if x['Total Sales'] !=0 else 0, axis=1)
-    merged_df['Product GP'] = merged_df.apply(lambda x: (x['Selling']/x['Cost'] -1) if x['Cost'] !=0 else 0, axis=1)
+    merged_df['Total Sales'] = merged_df[['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']].sum(axis=1)
+    merged_df['Total Profit'] = merged_df[['Jul-2025 Total Profit','Aug-2025 Total Profit','Sep-2025 Total Profit']].sum(axis=1)
+    merged_df['GP'] = merged_df.apply(lambda x: (x['Total Profit']/x['Total Sales']) if x['Total Sales']!=0 else 0, axis=1)
+    merged_df['Product GP'] = merged_df.apply(lambda x: (x['Selling']/x['Cost']-1) if x['Cost']!=0 else 0, axis=1)
 
     return merged_df
 
-# ================================
-# Load all data at once
-# ================================
 sales_file = "july to sep safa2025.Xlsx"
 price_file = "price list(1).xlsx"
 df = load_data(sales_file, price_file)
@@ -101,7 +89,7 @@ if page == "Sales & Profit Insights":
     # Key Metrics
     total_sales = filtered_df['Total Sales'].sum()
     total_profit = filtered_df['Total Profit'].sum()
-    overall_gp = (total_profit/total_sales) if total_sales !=0 else 0
+    overall_gp = (total_profit/total_sales) if total_sales!=0 else 0
 
     st.markdown("### 🔑 Key Metrics")
     c1,c2,c3 = st.columns(3)
@@ -142,7 +130,8 @@ if page == "Sales & Profit Insights":
 # ================================
 if page == "Zero Stock Items":
     st.title("📦 Items with Zero Stock (Had Sales)")
-    zero_df = df[(df['Stock']==0) & (df['Total Sales']>0)]
+    zero_df = apply_filters(df)
+    zero_df = zero_df[(zero_df['Stock']==0) & (zero_df['Total Sales']>0)]
     zero_df_display = zero_df.copy()
     zero_df_display['GP'] = zero_df_display['GP'].apply(lambda x: f"{x:.2%}")
     zero_df_display['Product GP'] = zero_df_display['Product GP'].apply(lambda x: f"{x:.2%}")
@@ -154,7 +143,8 @@ if page == "Zero Stock Items":
 # ================================
 if page == "Stock but No Sales":
     st.title("🛒 Items with Stock but No Sales")
-    stock_df = df[(df['Stock']>0) & (df['Total Sales']==0)]
+    stock_df = apply_filters(df)
+    stock_df = stock_df[(stock_df['Stock']>0) & (stock_df['Total Sales']==0)]
     stock_df_display = stock_df.copy()
     stock_df_display['GP'] = stock_df_display['GP'].apply(lambda x: f"{x:.2%}")
     stock_df_display['Product GP'] = stock_df_display['Product GP'].apply(lambda x: f"{x:.2%}")
