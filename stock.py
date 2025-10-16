@@ -61,17 +61,19 @@ if selected_gp != 'All':
         filtered_df = filtered_df[filtered_df['GP%'] >= 30]
 
 # ============================
-# Display Table
+# Key Insights at Top
 # ============================
-st.dataframe(filtered_df.reset_index(drop=True))
-
-# ============================
-# Summary KPIs
-# ============================
-st.markdown("### Summary")
+st.markdown("### Key Insights")
 total_sales = filtered_df['Total Sales'].sum()
 total_profit = filtered_df['Total Profit'].sum()
 avg_gp = filtered_df['GP%'].mean().round(2)
-st.metric("Total Sales", f"${total_sales:,.2f}")
-st.metric("Total Profit", f"${total_profit:,.2f}")
-st.metric("Average GP%", f"{avg_gp}%")
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Sales", f"{total_sales:,.0f}")
+col2.metric("Total Profit", f"{total_profit:,.0f}")
+col3.metric("Average GP%", f"{avg_gp}%")
+
+# ============================
+# Display Table
+# ============================
+st.dataframe(filtered_df.reset_index(drop=True))
