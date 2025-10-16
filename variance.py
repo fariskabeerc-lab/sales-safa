@@ -182,6 +182,12 @@ table_cols = ['Item Bar Code','Item Name','Cost','Selling','Stock',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
               'Sep-2025 Total Sales','Sep-2025 Total Profit']
 
+# Ensure Item Name and Bar Code exist
+if 'Item Bar Code' not in filtered_df.columns:
+    filtered_df['Item Bar Code'] = filtered_df.get('Item Code', 'Unknown')
+if 'Item Name' not in filtered_df.columns:
+    filtered_df['Item Name'] = 'Unknown'
+
 # Ensure numeric columns exist only
 numeric_cols = ['Cost','Selling','Stock',
                 'Total Sales','Total Profit',
