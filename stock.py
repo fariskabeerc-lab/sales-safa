@@ -32,28 +32,47 @@ price_file = "price list(1).xlsx"
 sales_df = load_sales_data(sales_file)
 price_df = load_price_list(price_file)
 
-# Fill missing sales columns if not in sales
+# Ensure numeric columns exist in price list
+for col in ['Cost', 'Selling', 'Stock']:
+    if col not in price_df.columns:
+        price_df[col] = 0
+    else:
+        price_df[col] = price_df[col].fillna(0)
+
+# Fill missing sales columns in sales data
 for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
             'Aug-2025 Total Sales','Aug-2025 Total Profit',
             'Sep-2025 Total Sales','Sep-2025 Total Profit']:
     if col not in sales_df.columns:
         sales_df[col] = 0
-
-# ================================
-# Merge sales and price data
-# ================================
-merged_df = pd.merge(sales_df, price_df[['Item Bar Code','Item Name']],
-                     left_on='Item Code', right_on='Item Bar Code', how='left')
-
-# Fill missing values
-merged_df['Item Name'] = merged_df['Item Name'].fillna('Unknown')
-for col in ['Cost','Selling','Stock','Jul-2025 Total Sales','Jul-2025 Total Profit',
-            'Aug-2025 Total Sales','Aug-2025 Total Profit','Sep-2025 Total Sales','Sep-2025 Total Profit']:
-    if col in merged_df.columns:
-        merged_df[col] = merged_df[col].fillna(0)
     else:
-        merged_df[col] = 0
+        sales_df[col] = sales_df[col].fillna(0)
 
+# ================================
+# Join Price List with Sales
+# ================================
+# Set index for join
+price_df.set_index('Item Bar Code', inplace=True)
+sales_df.set_index('Item Code', inplace=True)
+
+# Join sales onto price list (left join)
+merged_df = price_df.join(
+    sales_df[['Jul-2025 Total Sales','Jul-2025 Total Profit',
+              'Aug-2025 Total Sales','Aug-2025 Total Profit',
+              'Sep-2025 Total Sales','Sep-2025 Total Profit']],
+    how='left'
+)
+
+# Fill missing sales values with 0
+for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
+            'Aug-2025 Total Sales','Aug-2025 Total Profit',
+            'Sep-2025 Total Sales','Sep-2025 Total Profit']:
+    merged_df[col] = merged_df[col].fillna(0)
+
+# Reset index to have Item Bar Code as a column
+merged_df.reset_index(inplace=True)
+
+# Fill Category if missing
 if 'Category' not in merged_df.columns:
     merged_df['Category'] = 'Unknown'
 else:
@@ -69,15 +88,24 @@ selected_month = st.sidebar.selectbox("Select Month", list(month_map.keys()))
 profit_ranges = ["<5%", "5-10%", "10-20%", "20-30%", "30%+"]
 selected_range = st.sidebar.selectbox("Select Profit Range", profit_ranges)
 
+# Category Filter
+categories = merged_df['Category'].unique().tolist()
+categories.sort()
+categories.insert(0, "All")
+selected_category = st.sidebar.selectbox("Select Category", categories)
+
 # ================================
 # Compute Monthly GP
 # ================================
 sales_col = f"{selected_month} Total Sales"
 profit_col = f"{selected_month} Total Profit"
-merged_df['Monthly GP'] = merged_df.apply(lambda row: (row[profit_col]/row[sales_col]) if row[sales_col] != 0 else 0, axis=1)
+
+merged_df['Monthly GP'] = merged_df.apply(
+    lambda row: (row[profit_col]/row[sales_col]) if row[sales_col] != 0 else 0, axis=1
+)
 
 # ================================
-# Filter by Monthly GP
+# Filter by Profit Range
 # ================================
 def filter_by_profit(df, profit_range):
     if profit_range == "<5%":
@@ -95,6 +123,10 @@ def filter_by_profit(df, profit_range):
 
 filtered_df = filter_by_profit(merged_df, selected_range)
 
+# Apply category filter
+if selected_category != "All":
+    filtered_df = filtered_df[filtered_df['Category'] == selected_category]
+
 # ================================
 # Key Metrics
 # ================================
@@ -102,7 +134,7 @@ total_sales = filtered_df[sales_col].sum()
 total_profit = filtered_df[profit_col].sum()
 overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
 
-st.markdown(f"### 🔑 Key Metrics for {selected_month} | Profit Range: {selected_range}")
+st.markdown(f"### 🔑 Key Metrics for {selected_month} | Profit Range: {selected_range} | Category: {selected_category}")
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Sales", f"{total_sales:,.0f}")
 col2.metric("Total Profit", f"{total_profit:,.0f}")
