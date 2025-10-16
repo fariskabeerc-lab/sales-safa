@@ -32,7 +32,7 @@ price_file = "price list(1).xlsx"
 sales_df = load_sales_data(sales_file)
 price_df = load_price_list(price_file)
 
-# Fill missing numeric columns with NaN (so we can display 'Nil' later)
+# Fill missing numeric columns with NaN for display as 'Nil'
 for col in ['Cost','Selling','Stock']:
     if col not in price_df.columns:
         price_df[col] = pd.NA
@@ -44,18 +44,21 @@ for col in ['Jul-2025 Total Sales','Jul-2025 Total Profit',
         sales_df[col] = pd.NA
 
 # ================================
-# Full Outer Join: All items in either dataset
+# Full Outer Join on Barcode
 # ================================
 merged_df = pd.merge(
     price_df,
     sales_df,
     left_on='Item Bar Code',
     right_on='Item Code',
-    how='outer'  # full outer join => items in either dataset
+    how='outer',  # include items in either dataset
+    suffixes=('_price','_sales')
 )
 
-# Fill missing item names and category
+# Fill missing Item Name
 merged_df['Item Name'] = merged_df['Item Name'].fillna('Unknown')
+
+# Fill category for filter
 if 'Category' not in merged_df.columns:
     merged_df['Category'] = 'Unknown'
 else:
@@ -71,7 +74,7 @@ selected_month = st.sidebar.selectbox("Select Month", list(month_map.keys()))
 profit_ranges = ["<5%", "5-10%", "10-20%", "20-30%", "30%+"]
 selected_range = st.sidebar.selectbox("Select Profit Range", profit_ranges)
 
-# Category Filter
+# Category Filter: only categories in merged data
 categories = merged_df['Category'].unique().tolist()
 categories.sort()
 categories.insert(0, "All")
