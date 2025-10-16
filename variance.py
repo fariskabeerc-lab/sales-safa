@@ -27,7 +27,7 @@ def load_price_list(file_path):
 # File paths
 # ================================
 sales_file = "july to sep safa2025.Xlsx"  # replace with your file
-price_file = "price list(1).xlsx"            # replace with your file
+price_file = "price list(1).xlsx"        # replace with your file
 
 sales_df = load_sales_data(sales_file)
 price_df = load_price_list(price_file)
@@ -182,8 +182,14 @@ table_cols = ['Item Bar Code','Item Name','Cost','Selling','Stock',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
               'Sep-2025 Total Sales','Sep-2025 Total Profit']
 
-# Ensure all columns exist
-for col in table_cols:
+# Ensure numeric columns exist only
+numeric_cols = ['Cost','Selling','Stock',
+                'Total Sales','Total Profit',
+                'Jul-2025 Total Sales','Jul-2025 Total Profit',
+                'Aug-2025 Total Sales','Aug-2025 Total Profit',
+                'Sep-2025 Total Sales','Sep-2025 Total Profit']
+
+for col in numeric_cols:
     if col not in filtered_df.columns:
         filtered_df[col] = 0
 
