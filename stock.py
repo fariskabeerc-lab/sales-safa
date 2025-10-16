@@ -34,6 +34,9 @@ st.sidebar.header("Filters")
 categories = ['All'] + df['Category'].unique().tolist()
 selected_category = st.sidebar.selectbox("Select Category", options=categories, index=0)
 
+# Exclude category (multiselect, can exclude multiple)
+exclude_categories = st.sidebar.multiselect("Exclude Categories", options=df['Category'].unique().tolist())
+
 # GP% filter (single selection with "All")
 gp_options = ['All', "<5%", "5-10%", "10-20%", "20-30%", "30%+"]
 selected_gp = st.sidebar.selectbox("Select GP% Range", options=gp_options, index=0)
@@ -43,9 +46,13 @@ selected_gp = st.sidebar.selectbox("Select GP% Range", options=gp_options, index
 # ============================
 filtered_df = df.copy()
 
-# Filter by category
+# Include category filter
 if selected_category != 'All':
     filtered_df = filtered_df[filtered_df['Category'] == selected_category]
+
+# Exclude categories
+if exclude_categories:
+    filtered_df = filtered_df[~filtered_df['Category'].isin(exclude_categories)]
 
 # Filter by GP%
 if selected_gp != 'All':
@@ -67,13 +74,3 @@ st.markdown("### Key Insights")
 total_sales = filtered_df['Total Sales'].sum()
 total_profit = filtered_df['Total Profit'].sum()
 avg_gp = filtered_df['GP%'].mean().round(2)
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Sales", f"{total_sales:,.0f}")
-col2.metric("Total Profit", f"{total_profit:,.0f}")
-col3.metric("Average GP%", f"{avg_gp}%")
-
-# ============================
-# Display Table
-# ============================
-st.dataframe(filtered_df.reset_index(drop=True))
