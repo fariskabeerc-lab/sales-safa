@@ -27,7 +27,7 @@ def load_price_list(file_path):
 # File paths
 # ================================
 sales_file = "july to sep safa2025.Xlsx"  # replace with your file
-price_file = "price list(1).xlsx"        # replace with your file
+price_file = "price list(1).xlsx"            # replace with your file
 
 sales_df = load_sales_data(sales_file)
 price_df = load_price_list(price_file)
@@ -56,7 +56,7 @@ selected_category = st.sidebar.selectbox("Select Category", all_categories)
 # Filter Logic
 # ================================
 if item_search or barcode_search:
-    # --- SEARCH LOGIC REMAINS EXACTLY THE SAME ---
+    # Search in price list
     search_base = price_df.copy()
     if item_search:
         search_base = search_base[search_base['Item Name'].str.contains(item_search, case=False, na=False)]
@@ -82,36 +82,18 @@ if item_search or barcode_search:
     else:
         filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
 
-    # Handle case when no match is found
+    # --- Handle case when no match is found ---
     if filtered_df.empty:
         st.warning("❌ Item not found in the data.")
         st.stop()
 
 else:
-    # --- DEFAULT VIEW FIX ---
-    # Merge sales_df with price_df to get Item Name and Item Bar Code
-    filtered_df = pd.merge(sales_df, price_df[['Item Bar Code','Item Name']], 
-                           left_on='Item Code', right_on='Item Bar Code', how='left')
-    
-    # Fill missing Item Name
-    filtered_df['Item Name'] = filtered_df['Item Name'].fillna('Unknown')
-    
-    # Category column
+    # Default view (no search)
+    filtered_df = sales_df.copy()
     if 'Category' not in filtered_df.columns:
         filtered_df['Category'] = 'Unknown'
     else:
         filtered_df['Category'] = filtered_df['Category'].fillna('Unknown')
-    
-    # Fill numeric columns only if NaN, keep existing values
-    numeric_cols = ['Cost','Selling','Stock',
-                    'Jul-2025 Total Sales','Jul-2025 Total Profit',
-                    'Aug-2025 Total Sales','Aug-2025 Total Profit',
-                    'Sep-2025 Total Sales','Sep-2025 Total Profit']
-    for col in numeric_cols:
-        if col in filtered_df.columns:
-            filtered_df[col] = filtered_df[col].fillna(0)
-        else:
-            filtered_df[col] = 0
 
 # Apply category filter
 if selected_category != "All" and not (item_search or barcode_search):
@@ -200,8 +182,8 @@ table_cols = ['Item Bar Code','Item Name','Cost','Selling','Stock',
               'Aug-2025 Total Sales','Aug-2025 Total Profit',
               'Sep-2025 Total Sales','Sep-2025 Total Profit']
 
-# Ensure numeric columns exist
-for col in numeric_cols:
+# Ensure all columns exist
+for col in table_cols:
     if col not in filtered_df.columns:
         filtered_df[col] = 0
 
