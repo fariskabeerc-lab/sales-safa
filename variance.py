@@ -94,12 +94,12 @@ if selected_category != "All" and not (item_search or barcode_search):
 # ================================
 # Ensure required columns exist
 # ================================
-for col in ['Stock', 'Total Sales']:
+for col in ['Stock', 'Total Sales', 'Cost', 'Selling']:
     if col not in filtered_df.columns:
         filtered_df[col] = 0
 
 # ================================
-# Compute Totals
+# Compute Totals for main page
 # ================================
 def compute_row_totals(row):
     sales_cols = ['Jul-2025 Total Sales','Aug-2025 Total Sales','Sep-2025 Total Sales']
@@ -107,10 +107,10 @@ def compute_row_totals(row):
 
     total_sales = sum([row[col] if pd.notna(row[col]) else 0 for col in sales_cols])
     total_profit = sum([row[col] if pd.notna(row[col]) else 0 for col in profit_cols])
-    overall_gp = (total_profit / total_sales) if total_sales != 0 else 0
-    return pd.Series([total_sales, total_profit, overall_gp])
+    gp = (total_profit / total_sales) if total_sales != 0 else 0
+    return pd.Series([total_sales, total_profit, gp])
 
-filtered_df[['Total Sales','Total Profit','Overall GP']] = filtered_df.apply(compute_row_totals, axis=1)
+filtered_df[['Total Sales','Total Profit','GP']] = filtered_df.apply(compute_row_totals, axis=1)
 
 # ================================
 # --- Page: Sales & Profit Insights ---
@@ -132,7 +132,7 @@ if page == "Sales & Profit Insights":
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Sales", f"{total_sales:,.0f}")
     col2.metric("Total Profit", f"{total_profit:,.0f}")
-    col3.metric("Overall GP", f"{overall_gp:.2%}")
+    col3.metric("GP", f"{overall_gp:.2%}")
 
     # Monthly Performance Graph
     if not (item_search or barcode_search):
@@ -173,14 +173,14 @@ if page == "Sales & Profit Insights":
     # Item-wise Table
     st.markdown("### 📝 Item-wise Details")
     table_cols = ['Item Bar Code','Item Name','Cost','Selling','Stock',
-                  'Total Sales','Total Profit','Overall GP',
+                  'Total Sales','Total Profit','GP',
                   'Jul-2025 Total Sales','Jul-2025 Total Profit',
                   'Aug-2025 Total Sales','Aug-2025 Total Profit',
                   'Sep-2025 Total Sales','Sep-2025 Total Profit']
     for col in table_cols:
         if col not in filtered_df.columns:
             filtered_df[col] = 0
-    filtered_df['Overall GP'] = filtered_df['Overall GP'].apply(lambda x: f"{x:.2%}")
+    filtered_df['GP'] = filtered_df['GP'].apply(lambda x: f"{x:.2%}")
     st.dataframe(filtered_df[table_cols].sort_values('Total Sales', ascending=False))
 
 # ================================
@@ -189,16 +189,14 @@ if page == "Sales & Profit Insights":
 if page == "Zero Stock Items":
     st.title("📦 Items with Zero Stock (Had Sales)")
 
-    # Use all items if search returns nothing
-    if filtered_df.empty:
-        st.info("No items match your search. Showing all items.")
-        zero_stock_df = sales_df.copy()
-    else:
-        zero_stock_df = filtered_df.copy()
-
-    for col in ['Stock', 'Total Sales']:
+    zero_stock_df = sales_df.copy()
+    for col in ['Stock', 'Total Sales', 'Cost', 'Selling']:
         if col not in zero_stock_df.columns:
             zero_stock_df[col] = 0
+
+    # GP = Selling / Cost
+    zero_stock_df['GP'] = zero_stock_df.apply(lambda x: (x['Selling'] / x['Cost'] - 1) if x['Cost'] != 0 else 0, axis=1)
+    zero_stock_df['GP'] = zero_stock_df['GP'].apply(lambda x: f"{x:.2%}")
 
     zero_stock_df = zero_stock_df[(zero_stock_df['Stock'] == 0) & (zero_stock_df['Total Sales'] > 0)]
     st.markdown(f"**Total Items:** {len(zero_stock_df)}")
@@ -210,15 +208,14 @@ if page == "Zero Stock Items":
 if page == "Stock but No Sales":
     st.title("🛒 Items with Stock but No Sales")
 
-    if filtered_df.empty:
-        st.info("No items match your search. Showing all items.")
-        stock_no_sales_df = sales_df.copy()
-    else:
-        stock_no_sales_df = filtered_df.copy()
-
-    for col in ['Stock', 'Total Sales']:
+    stock_no_sales_df = sales_df.copy()
+    for col in ['Stock', 'Total Sales', 'Cost', 'Selling']:
         if col not in stock_no_sales_df.columns:
             stock_no_sales_df[col] = 0
+
+    # GP = Selling / Cost
+    stock_no_sales_df['GP'] = stock_no_sales_df.apply(lambda x: (x['Selling'] / x['Cost'] - 1) if x['Cost'] != 0 else 0, axis=1)
+    stock_no_sales_df['GP'] = stock_no_sales_df['GP'].apply(lambda x: f"{x:.2%}")
 
     stock_no_sales_df = stock_no_sales_df[(stock_no_sales_df['Stock'] > 0) & (stock_no_sales_df['Total Sales'] == 0)]
     st.markdown(f"**Total Items:** {len(stock_no_sales_df)}")
