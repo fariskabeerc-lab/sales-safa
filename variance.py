@@ -188,18 +188,14 @@ if page == "Sales & Profit Insights":
 # ================================
 if page == "Zero Stock Items":
     st.title("📦 Items with Zero Stock (Had Sales)")
-
-    # Use all items if search returns nothing
-    if filtered_df.empty:
-        st.info("No items match your search. Showing all items.")
-        zero_stock_df = sales_df.copy()
-    else:
-        zero_stock_df = filtered_df.copy()
-
+    
+    zero_stock_df = sales_df.copy()  # always start from full sales_df
+    
+    # Ensure required columns exist
     for col in ['Stock', 'Total Sales']:
         if col not in zero_stock_df.columns:
             zero_stock_df[col] = 0
-
+    
     zero_stock_df = zero_stock_df[(zero_stock_df['Stock'] == 0) & (zero_stock_df['Total Sales'] > 0)]
     st.markdown(f"**Total Items:** {len(zero_stock_df)}")
     st.dataframe(zero_stock_df.sort_values('Total Sales', ascending=False))
@@ -209,17 +205,14 @@ if page == "Zero Stock Items":
 # ================================
 if page == "Stock but No Sales":
     st.title("🛒 Items with Stock but No Sales")
-
-    if filtered_df.empty:
-        st.info("No items match your search. Showing all items.")
-        stock_no_sales_df = sales_df.copy()
-    else:
-        stock_no_sales_df = filtered_df.copy()
-
+    
+    stock_no_sales_df = sales_df.copy()  # always start from full sales_df
+    
+    # Ensure required columns exist
     for col in ['Stock', 'Total Sales']:
         if col not in stock_no_sales_df.columns:
             stock_no_sales_df[col] = 0
-
+    
     stock_no_sales_df = stock_no_sales_df[(stock_no_sales_df['Stock'] > 0) & (stock_no_sales_df['Total Sales'] == 0)]
     st.markdown(f"**Total Items:** {len(stock_no_sales_df)}")
     st.dataframe(stock_no_sales_df.sort_values('Stock', ascending=False))
