@@ -33,7 +33,7 @@ def load_data(file_path):
 # ============================
 # Load File
 # ============================
-file_path = "oct sales shams salem.Xlsx"
+file_path = "oct salem.Xlsx"
 df = load_data(file_path)
 
 if df.empty:
