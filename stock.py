@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # ============================
 # Page Config
@@ -17,16 +18,18 @@ def load_data(file_path):
     except Exception as e:
         st.error(f"Error loading file: {e}")
         return pd.DataFrame()  # Return empty DataFrame if error
+
     # Fill missing categories
     df['Category'] = df['Category'].fillna('Unknown')
+
     # Calculate total sales and total profit
     sales_cols = [col for col in df.columns if 'Total Sales' in col]
     profit_cols = [col for col in df.columns if 'Total Profit' in col]
     df['Total Sales'] = df[sales_cols].sum(axis=1)
     df['Total Profit'] = df[profit_cols].sum(axis=1)
+
     # Calculate GP%
     df['GP%'] = (df['Total Profit'] / df['Total Sales'] * 100).round(2)
-    # Replace inf or NaN GP% with 0
     df['GP%'] = df['GP%'].replace([float('inf'), -float('inf')], 0).fillna(0)
     return df
 
@@ -60,15 +63,12 @@ else:
     # ============================
     filtered_df = df.copy()
 
-    # Include category filter
     if selected_category != 'All':
         filtered_df = filtered_df[filtered_df['Category'] == selected_category]
 
-    # Exclude categories
     if exclude_categories:
         filtered_df = filtered_df[~filtered_df['Category'].isin(exclude_categories)]
 
-    # Filter by GP%
     if selected_gp != 'All':
         if selected_gp == "<5%":
             filtered_df = filtered_df[filtered_df['GP%'] < 5]
@@ -102,3 +102,41 @@ else:
         st.info("No items match the selected filters.")
     else:
         st.dataframe(filtered_df.reset_index(drop=True))
+
+        # ============================
+        # Category-wise Negative GP% Graph
+        # ============================
+        st.markdown("### 📉 Categories with High Negative GP%")
+
+        # Group by category and get average GP%
+        gp_by_category = (
+            filtered_df.groupby('Category')['GP%']
+            .mean()
+            .reset_index()
+            .sort_values(by='GP%', ascending=True)
+        )
+
+        # Filter only negative GP% categories
+        negative_gp = gp_by_category[gp_by_category['GP%'] < 0]
+
+        if negative_gp.empty:
+            st.info("No categories have negative GP%.")
+        else:
+            fig = px.bar(
+                negative_gp,
+                x='Category',
+                y='GP%',
+                text='GP%',
+                color='GP%',
+                color_continuous_scale='rdbu',
+                title="Average GP% by Category (Negative Values Highlighted)",
+            )
+            fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig.update_layout(
+                xaxis_title="Category",
+                yaxis_title="Average GP%",
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                height=500
+            )
+            st.plotly_chart(fig, use_container_width=True)
