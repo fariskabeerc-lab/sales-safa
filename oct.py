@@ -6,7 +6,7 @@ import pandas as pd
 # Page Config
 # ============================
 st.set_page_config(page_title="Sales & Profit Dashboard", layout="wide")
-st.title("📊 Sales & Profit Insights (Jul-Sep 2025)")
+st.title("📊Safa Sales & Profit Insights (OCT 2025)")
 
 # ============================
 # Load Data
