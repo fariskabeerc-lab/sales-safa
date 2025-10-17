@@ -104,39 +104,39 @@ else:
         st.dataframe(filtered_df.reset_index(drop=True))
 
         # ============================
-        # Category-wise Negative GP% Graph
+        # Category-wise Count of Negative GP% Items
         # ============================
-        st.markdown("### 📉 Categories with High Negative GP%")
+        st.markdown("### 📉 Categories with Most Negative GP% Items")
 
-        # Group by category and get average GP%
-        gp_by_category = (
-            filtered_df.groupby('Category')['GP%']
-            .mean()
-            .reset_index()
-            .sort_values(by='GP%', ascending=True)
+        # Filter only negative GP% items
+        negative_items = filtered_df[filtered_df['GP%'] < 0]
+
+        # Group and count
+        neg_count_by_category = (
+            negative_items.groupby('Category')
+            .size()
+            .reset_index(name='Negative Item Count')
+            .sort_values(by='Negative Item Count', ascending=False)
         )
 
-        # Filter only negative GP% categories
-        negative_gp = gp_by_category[gp_by_category['GP%'] < 0]
-
-        if negative_gp.empty:
-            st.info("No categories have negative GP%.")
+        if neg_count_by_category.empty:
+            st.info("No categories have items with negative GP%.")
         else:
             fig = px.bar(
-                negative_gp,
+                neg_count_by_category,
                 x='Category',
-                y='GP%',
-                text='GP%',
-                color='GP%',
-                color_continuous_scale='rdbu',
-                title="Average GP% by Category (Negative Values Highlighted)",
+                y='Negative Item Count',
+                text='Negative Item Count',
+                color='Negative Item Count',
+                color_continuous_scale='Reds',
+                title="Number of Items with Negative GP% by Category",
             )
-            fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig.update_traces(texttemplate='%{text}', textposition='outside')
             fig.update_layout(
                 xaxis_title="Category",
-                yaxis_title="Average GP%",
-                showlegend=False,
+                yaxis_title="Count of Negative GP% Items",
                 plot_bgcolor='rgba(0,0,0,0)',
-                height=500
+                height=500,
+                showlegend=False
             )
             st.plotly_chart(fig, use_container_width=True)
