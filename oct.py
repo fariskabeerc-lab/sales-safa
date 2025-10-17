@@ -34,7 +34,7 @@ def load_data(file_path):
 # ============================
 # Load File
 # ============================
-file_path = "oxt sale safa.Xlsx"
+file_path = "oct sale safa.Xlsx"
 df = load_data(file_path)
 
 if df.empty:
